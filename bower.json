@@ -1,0 +1,21 @@
+{
+  "name": "bg-select",
+  "homepage": "https://github.com/Greenflex/bg-select",
+  "authors": [
+    "Sébastien Valencia <svalencia@greenflex.com>"
+  ],
+  "description": "angular directive for selectize",
+  "main": "src/bg-select.directive.js",
+  "moduleType": [],
+  "license": "MIT",
+  "dependencies": {
+    "angular": ">=1.4.0"
+  },
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}
