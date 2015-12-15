@@ -12,31 +12,137 @@
         return {
             restrict: 'A',
             scope: {
-                'bgSelect': '=?',
+                'bgSelect': '=',
                 'ngModel': '=',
-                'params': '=?'
+                'ngModelValue': '=',
+                'params': '=',
+                'ngDisabled': '=',
+                'disableParamsWatch': '='
             },
             link: function(scope, element, attrs) {
 
+                if (!angular.isDefined(element)) {
+                    return;
+                }
+
+                /**
+                 * Load select data form a query (autocomplete)
+                 * @param  {string} query      search query
+                 * @param  {boolean} forceLoad force autocomplete even if the query is empty
+                 * @return {void}
+                 */
+                function apiLoad (query, forceLoad) {
+                    if (!query.length && !forceLoad) {
+                        return;
+                    }
+
+                    var params = [];
+
+                    // init params object (allow dynamic changes unlike param-)
+                    if (scope.params) {
+                        params = angular.copy(scope.params);
+                    }
+
+                    params[field] = query;
+
+                    // Passing addition parameters prefixed by "param-"
+                    angular.forEach(attrs, function(value, key) {
+                        if (key.indexOf('param-') > -1) {
+                            var paramkey = key.substring(5, key.length).toLowerCase();
+                            params[paramkey] = value;
+                        }
+                    });
+
+                    // Cancel that request if the previous was not finished
+                    if (!apiCallDone) {
+                        canceler.resolve();
+                        canceler = $q.defer(); // new defer for the next request
+                    }
+
+                    apiCallDone = false;
+
+                    Restangular.all(attrs.api).withHttpConfig({timeout: canceler.promise}).getList(params)
+                        .then(function (options) {
+                            scope.bgSelect = options;
+                            apiCallDone = true;
+                        });
+                }
+
+                /**
+                 * Format options for selctize
+                 * @param  {array} options raw options
+                 * @return {array} formatted options
+                 */
+                function getSelectizeOptions(options)
+                {
+                    var selectizeOptions = [];
+
+                    angular.forEach(options, function(option) {
+                        selectizeOptions.push({
+                            text: option[field],
+                            value: option.id
+                        });
+                    });
+
+                    return selectizeOptions;
+                }
+
+                /**
+                 * Refresh selection options
+                 * @param {array} options List of options
+                 * @return {void}
+                 */
+                function refreshOptions(options, oldOptions)
+                {
+                    // prevent not wanted refresh (this event can be triggered even if the value hasn't changed)
+                    if (options === oldOptions) {
+                        return;
+                    }
+
+                    if (angular.isDefined(options) && angular.isDefined(oldOptions)) {
+                        selectize.clearOptions();
+                    }
+
+                    // add manually new options
+                    var selectizeOptions = getSelectizeOptions(options);
+
+                    angular.forEach(selectizeOptions, function(option) {
+                        selectize.addOption(option);
+                    });
+
+                    if (attrs.api) {
+                        selectize.refreshOptions();
+                    }
+                }
+
+                // start
                 var $translate;
+                var options = {
+                    plugins: ['remove_button'],
+                    render: {
+                        // prevent empty option
+                        option: function(item, escape) {
+                            if (item.text) {
+                                return '<div>' + escape(item.text) + '</div>';
+                            } else {
+                                return '';
+                            }
+                        }
+                    }
+                };
+                var $select;
+                var selectize;
 
                 try {
                     $translate = $injector.get('translate');
-                } catch(e){
-                    $translate = { instant: function(str) { return str;} };
+                } catch (e) {
+                    $translate = {instant: function(str) { return str;}};
                 }
-
 
                 var field = 'label';
                 if (angular.isDefined(attrs.field)) {
                     field = attrs.field;
                 }
-
-                var options = { plugins: ['remove_button']};
-                var $select;
-                var selectize;
-
-                element.addClass('selectize');
 
                 if (attrs.api) {
 
@@ -50,61 +156,13 @@
                     var apiCallDone = true;
 
                     // add element from api
-                    options.load = function(query, forceLoad) {
-                        if (!query.length && !forceLoad) {
-                            return;
-                        }
+                    options.load = apiLoad;
 
-                        var params = [];
-
-                        // init params object (allow dynamic changes unlike param-)
-                        if (scope.params) {
-                            params = angular.copy(scope.params);
-                        }
-
-                        params[field] = query;
-
-                        // Passing addition parameters prefixed by "param-"
-                        angular.forEach(attrs, function(value, key) {
-                            if (key.indexOf("param-") > -1) {
-                                var paramkey = key.substring(5, key.length).toLowerCase();
-                                params[paramkey] = value;
-                            }
-                        });
-
-                        // Cancel that request if the previous was not finished
-                        if (!apiCallDone) {
-                            canceler.resolve();
-                            canceler = $q.defer(); // new defer for the next request
-                        }
-
-                        apiCallDone = false;
-
-
-                        Restangular.all(attrs.api).withHttpConfig({timeout: canceler.promise}).getList(params)
-                            .then(function (options) {
-
-                                if (options.length === 0) {
-                                    //var result = {id: '-'};
-                                    //result[field] = $translate.instant('Aucun résultat trouvé pour %value%').replace('%value%', query);
-                                    //scope.bgSelect = [result];
-                                } else {
-                                    scope.bgSelect = options;
-                                }
-
-                                apiCallDone = true;
-                            });
-                    };
+                    // init default values
+                    options.options = getSelectizeOptions(scope.bgSelect);
 
                     $select = element.selectize(options);
                     selectize = $select[0].selectize;
-
-                    // we can't select "no result" text
-                    selectize.on('change', function(val) {
-                        if (val === '-') {
-                            selectize.clearOptions();
-                        }
-                    });
 
                 } else {
 
@@ -115,7 +173,7 @@
                     }
 
                     // add element
-                    $select = element.selectize();
+                    $select = element.selectize(options);
                     selectize = $select[0].selectize;
                 }
 
@@ -134,7 +192,6 @@
 
                             selectize.setValue(scope.ngModel.id);
                         } else {
-
                             if (attrs.api && scope.ngModel && !scope.bgSelect) {
                                 // in api mode (ajax call) we must call the API to set the label
                                 Restangular.all(attrs.api)
@@ -159,7 +216,7 @@
                                         values.push(value.id);
                                     });
                                 } else {
-                                    if(angular.isString(scope.ngModel)) {
+                                    if (angular.isString(scope.ngModel)) {
                                         values = scope.ngModel.split(',');
                                     } else {
                                         values = scope.ngModel;
@@ -172,31 +229,16 @@
                     }
                 }, 0);
 
-
-                // force options reload if params change
-                scope.$watch(function() { return scope.params; }, function(newValue) {
-
-                    // remove value (allow to clear options)
-                    scope.ngModel = null;
-
-                    if(newValue && options.load) {
-                        options.load('', true);
-                    }
-                }, true);
-
-
                 // apply model changes
                 scope.$watch('ngModel', function (newValue) {
-                    if(selectize) {
-
+                    if (selectize) {
                         var values = [];
-
                         if (angular.isObject(newValue)) {
                             angular.forEach(newValue, function(value) {
                                 values.push(value.id);
                             });
                         } else {
-                            if(angular.isString(newValue)) {
+                            if (angular.isString(newValue)) {
                                 values = newValue.split(',');
                             } else {
                                 values = newValue;
@@ -209,26 +251,26 @@
                     }
                 });
 
-                // refresh selectize options on scope change
-                scope.$watch('bgSelect', function(options) {
+                // force options reload if params change
+                scope.$watch('params', function(newValue, oldValue) {
+                    if (angular.isDefined(newValue) && newValue !== oldValue) {
 
-                    if (scope.ngModel === null || scope.ngModel === '') {
-                        selectize.clearOptions();
-                    }
-
-                    angular.forEach(options, function(option) {
-                        selectize.addOption({
-                            text: option[field],
-                            value: option.id
-                        });
-
-                        if (attrs.api) {
-                            selectize.refreshOptions();
+                        // params watch disabled ? (this is very useful for linked selects)
+                        if (scope.disableParamsWatch) {
+                            scope.disableParamsWatch = false;
+                            return;
                         }
-                    });
 
-                });
+                        // remove value (allow to clear options)
+                        scope.ngModel = null;
+                        if (newValue && options.load) {
+                            apiLoad('', true);
+                        }
+                    }
+                }, true);
 
+                // refresh selectize options on scope change
+                scope.$watch('bgSelect', refreshOptions);
             }
         };
     }
