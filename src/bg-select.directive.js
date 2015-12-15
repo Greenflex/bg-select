@@ -16,7 +16,6 @@
                 'ngModel': '=',
                 'ngModelValue': '=',
                 'params': '=',
-                'ngDisabled': '=',
                 'disableParamsWatch': '='
             },
             link: function(scope, element, attrs) {
@@ -69,7 +68,7 @@
                 }
 
                 /**
-                 * Format options for selctize
+                 * Format options for selectize
                  * @param  {array} options raw options
                  * @return {array} formatted options
                  */
@@ -99,7 +98,7 @@
                         return;
                     }
 
-                    if (angular.isDefined(options) && angular.isDefined(oldOptions)) {
+                    if (angular.isDefined(options) && angular.isDefined(oldOptions) && !attrs.multiple) {
                         selectize.clearOptions();
                     }
 
@@ -115,6 +114,67 @@
                     }
                 }
 
+                /**
+                 * Event trigger on ngModel change
+                 * @param  {string} newValue
+                 * @param  {string} oldValue
+                 * @return {void}
+                 */
+                function onModelChange(newValue, oldValue)
+                {
+                    // prevent not wanted changes
+                    if (newValue === oldValue) {
+                        return;
+                    }
+
+                    if (selectize) {
+                        var values = [];
+                        if (angular.isObject(newValue)) {
+                            angular.forEach(newValue, function(value) {
+                                values.push(value.id);
+                            });
+                        } else {
+                            if (angular.isString(newValue)) {
+                                values = newValue.split(',');
+                            } else {
+                                values = newValue;
+                            }
+                        }
+
+                        $timeout(function () {
+                            selectize.setValue(values);
+                        }, 0);
+                    }
+                }
+
+                /**
+                 * Event trigger on params change
+                 * @param  {array} newValue
+                 * @param  {array} oldValue
+                 * @return {void}
+                 */
+                function onParamsChange(newValue, oldValue)
+                {
+                    if (angular.isDefined(newValue) && newValue !== oldValue) {
+                        // params watch disabled ? (this is very useful for linked selects)
+                        if (scope.disableParamsWatch) {
+                            scope.disableParamsWatch = false;
+                            return;
+                        }
+
+                        // remove value (allow to clear options)
+                        scope.ngModel = null;
+                        if (newValue && options.load) {
+                            apiLoad('', true);
+                        }
+                    }
+                }
+
+                var field = 'label';
+                if (angular.isDefined(attrs.field)) {
+                    field = attrs.field;
+                }
+
                 // start
                 var $translate;
                 var options = {
@@ -128,10 +188,14 @@
                                 return '';
                             }
                         }
-                    }
+                    },
+                    options :  getSelectizeOptions(scope.bgSelect)
                 };
-                var $select;
-                var selectize;
+
+                // limit max items
+                if (!attrs.multiple) {
+                    options.maxItems = 1;
+                }
 
                 try {
                     $translate = $injector.get('translate');
@@ -139,13 +203,7 @@
                     $translate = {instant: function(str) { return str;}};
                 }
 
-                var field = 'label';
-                if (angular.isDefined(attrs.field)) {
-                    field = attrs.field;
-                }
-
                 if (attrs.api) {
-
                     if (!angular.isDefined(attrs.placeholder)) {
                         element.attr('placeholder', $translate.instant('Rechercher ....'));
                     } else {
@@ -158,29 +216,22 @@
                     // add element from api
                     options.load = apiLoad;
 
-                    // init default values
-                    options.options = getSelectizeOptions(scope.bgSelect);
-
-                    $select = element.selectize(options);
-                    selectize = $select[0].selectize;
-
                 } else {
-
                     if (!angular.isDefined(attrs.placeholder)) {
                         element.attr('placeholder', $translate.instant('Choisir ....'));
                     } else {
                         element.attr('placeholder', $translate.instant(attrs.placeholder));
                     }
-
-                    // add element
-                    $select = element.selectize(options);
-                    selectize = $select[0].selectize;
                 }
+
+                // add element
+                var $select = element.selectize(options);
+                var selectize = $select[0].selectize;
 
                 // set value from model, timeout to prevent digest error
                 $timeout(function() {
-
                     if (scope.ngModel) {
+                        // if ngModel is an object (not working with params feature)
                         if (angular.isDefined(scope.ngModel.id)) {
                             if (attrs.api) {
                                 // in api mode (ajax call) we must preload the selected option
@@ -189,11 +240,11 @@
                                     value: scope.ngModel.id
                                 });
                             }
-
                             selectize.setValue(scope.ngModel.id);
                         } else {
                             if (attrs.api && scope.ngModel && !scope.bgSelect) {
                                 // in api mode (ajax call) we must call the API to set the label
+                                // this is an "emergency" call, values should be prefilled inside scope.bgSelect
                                 Restangular.all(attrs.api)
                                     .withHttpConfig({timeout: canceler.promise})
                                     .getList({id: scope.ngModel})
@@ -208,7 +259,6 @@
                                         }, 0);
                                     });
                             } else {
-
                                 var values = [];
 
                                 if (angular.isObject(scope.ngModel)) {
@@ -230,44 +280,10 @@
                 }, 0);
 
                 // apply model changes
-                scope.$watch('ngModel', function (newValue) {
-                    if (selectize) {
-                        var values = [];
-                        if (angular.isObject(newValue)) {
-                            angular.forEach(newValue, function(value) {
-                                values.push(value.id);
-                            });
-                        } else {
-                            if (angular.isString(newValue)) {
-                                values = newValue.split(',');
-                            } else {
-                                values = newValue;
-                            }
-                        }
-
-                        $timeout(function () {
-                            selectize.setValue(values);
-                        }, 0);
-                    }
-                });
+                scope.$watch('ngModel', onModelChange);
 
                 // force options reload if params change
-                scope.$watch('params', function(newValue, oldValue) {
-                    if (angular.isDefined(newValue) && newValue !== oldValue) {
-
-                        // params watch disabled ? (this is very useful for linked selects)
-                        if (scope.disableParamsWatch) {
-                            scope.disableParamsWatch = false;
-                            return;
-                        }
-
-                        // remove value (allow to clear options)
-                        scope.ngModel = null;
-                        if (newValue && options.load) {
-                            apiLoad('', true);
-                        }
-                    }
-                }, true);
+                scope.$watch('params', onParamsChange, true);
 
                 // refresh selectize options on scope change
                 scope.$watch('bgSelect', refreshOptions);
