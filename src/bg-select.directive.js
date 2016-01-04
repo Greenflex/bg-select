@@ -77,10 +77,12 @@
                     var selectizeOptions = [];
 
                     angular.forEach(options, function(option) {
-                        selectizeOptions.push({
-                            text: option[field],
-                            value: option.id
-                        });
+                        if (option[field].trim() !== '') {
+                            selectizeOptions.push({
+                                text: option[field],
+                                value: option[value]
+                            });
+                        }
                     });
 
                     return selectizeOptions;
@@ -175,6 +177,11 @@
                     field = attrs.field;
                 }
 
+                var value = 'id';
+                if (angular.isDefined(attrs.value)) {
+                    value = attrs.value;
+                }
+
                 // start
                 var $translate;
                 var options = {
@@ -222,6 +229,7 @@
                     } else {
                         element.attr('placeholder', $translate.instant(attrs.placeholder));
                     }
+
                 }
 
                 // add element
@@ -272,10 +280,11 @@
                                         values = scope.ngModel;
                                     }
                                 }
-
                                 selectize.setValue(values);
                             }
                         }
+                    } else {
+                        // no model defined
                     }
                 }, 0);
 
