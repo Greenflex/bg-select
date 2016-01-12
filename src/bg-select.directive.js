@@ -80,7 +80,7 @@
                         if (option[field].trim() !== '') {
                             selectizeOptions.push({
                                 text: option[field],
-                                value: option[value]
+                                value: option[key]
                             });
                         }
                     });
@@ -177,9 +177,9 @@
                     field = attrs.field;
                 }
 
-                var value = 'id';
-                if (angular.isDefined(attrs.value)) {
-                    value = attrs.value;
+                var key = 'id';
+                if (angular.isDefined(attrs.key)) {
+                    key = attrs.key;
                 }
 
                 // start
