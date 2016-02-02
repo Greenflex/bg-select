@@ -5,9 +5,9 @@
         .module('greenflex.bgSelect', [])
         .directive('bgSelect', select);
 
-    select.$inject = ['$rootScope', '$timeout', 'Restangular', '$q', '$injector'];
+    select.$inject = ['$rootScope', '$timeout', 'Restangular', '$q', '$injector', '$interpolate'];
 
-    function select($rootScope, $timeout, Restangular, $q, $injector) {
+    function select($rootScope, $timeout, Restangular, $q, $injector, $interpolate) {
 
         return {
             restrict: 'A',
@@ -16,7 +16,8 @@
                 'ngModel': '=',
                 'ngModelValue': '=',
                 'params': '=',
-                'disableParamsWatch': '='
+                'disableParamsWatch': '=',
+                'template': '=',
             },
             link: function(scope, element, attrs) {
 
@@ -78,10 +79,7 @@
 
                     angular.forEach(options, function(option) {
                         if (option[field].trim() !== '') {
-                            selectizeOptions.push({
-                                text: option[field],
-                                value: option[key]
-                            });
+                            selectizeOptions.push(option);
                         }
                     });
 
@@ -185,18 +183,25 @@
                 // start
                 var $translate;
                 var options = {
+                    valueField: key,
+                    labelField: field,
+                    searchField: field,
                     plugins: ['remove_button'],
                     render: {
                         // prevent empty option
                         option: function(item, escape) {
-                            if (item.text) {
-                                return '<div>' + escape(item.text) + '</div>';
+
+                            if (!scope.template) {
+                                return '<div>' + escape(item[field]) + '</div>';
                             } else {
-                                return '';
+                                return '<div>' + $interpolate(scope.template)(item) + '</div>';
                             }
                         }
                     },
-                    options :  getSelectizeOptions(scope.bgSelect)
+                    options: getSelectizeOptions(scope.bgSelect),
+                    onDelete: function(values) {
+                        scope.ngModel = null;
+                    }
                 };
 
                 // limit max items
@@ -238,17 +243,15 @@
 
                 // set value from model, timeout to prevent digest error
                 $timeout(function() {
+
                     if (scope.ngModel) {
                         // if ngModel is an object (not working with params feature)
-                        if (angular.isDefined(scope.ngModel.id)) {
+                        if (angular.isDefined(scope.ngModel[key])) {
                             if (attrs.api) {
                                 // in api mode (ajax call) we must preload the selected option
-                                selectize.addOption({
-                                    text: scope.ngModel[field],
-                                    value: scope.ngModel.id
-                                });
+                                selectize.addOption(scope.ngModel);
                             }
-                            selectize.setValue(scope.ngModel.id);
+                            selectize.setValue(scope.ngModel[key]);
                         } else {
                             if (attrs.api && scope.ngModel && !scope.bgSelect) {
                                 // in api mode (ajax call) we must call the API to set the label
@@ -258,10 +261,7 @@
                                     .getList({id: scope.ngModel})
                                     .then(function (options) {
                                         var option = options[0];
-                                        selectize.addOption({
-                                            text: option[field],
-                                            value: scope.ngModel
-                                        });
+                                        selectize.addOption(option);
                                         $timeout(function() {
                                             selectize.setValue(scope.ngModel);
                                         }, 0);
